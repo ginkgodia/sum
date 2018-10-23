@@ -67,6 +67,78 @@
 	所以, 在ubuntu 创建用户命令:  
 	useradd -m -ppasswd -s /bin/bash username 
 
+### redhat 7 使用centos7 的源
+
+RedHat yum源是收费的，没有成功注册RH的机器是不能正常使用yum的， 它的yum 源需要注册付费， 一般采用centos的源来替代或者在本地用本地镜像来做本地源。
+
+提示如下：
+
+```
+This system is not registered to Red Hat Subscription Management. You can use subscription-manager to register.
+Cleaning repos: base extras updates
+```
+
+
+
+本次采用centos源来代替redhat源
+
+首先要删除redhat 默认的yum 软件和版本包和一个python 包
+
+```shell
+# rpm -qa |grep yum
+yum-utils-1.1.31-2.2.noarch
+yum-metadata-parser-1.1.4-10.el7.x86_64
+yum-3.4.3-132.el7.noarch
+yum-rhn-plugin-2.0.1-5.el7.noarc
+python-urlgrabber-3.10-8.el7.noarch
+```
+
+和一个系统版本包，不然会报错：
+
+```
+file /etc/os-release from install of centos-release-7-5.1804.5.el7.centos.x8
+......
+和其他类似报错
+```
+
+需要卸载`rpm -qa |grep redhat-release`
+
+然后执行删除操作:
+
+```
+rpm -aq|grep yum|xargs rpm -e --nodeps
+rpm -qa |grep redhat-release |xargs rpm -e  --nodeps
+```
+
+一定要记录这原来系统的rpm 包的版本号， yum 版本和Yum-utils版本一定要一致
+
+然后从网络上下载对应的版本包安装成功即可替换系统yum软件
+
+--- 注意： 一定不要替换掉系统的rpm包， 不然就GG了。
+
+安装阿里的yum 源
+
+```shell
+wget -O /etc/yum.repos.d/Centos-7.repo http://mirrors.aliyun.com/repo/Centos-7.repo
+```
+
+然后替换掉软件源中的变量，否则报错：
+
+```shell
+for i in `ls`;do sed -i 's/\$releasever/7/' $i;done
+for i in `ls`;do sed -i 's/\$contentdir/centos-7/' $i;done
+否则报如下错误：
+One of the configured repositories failed (CentOS-$releasever - Base - mirrors.aliyun.com),
+```
+
+执行yum clean all 
+
+yum makecache
+
+
+
+
+
 
 
 
@@ -541,7 +613,25 @@ curl -Lo minikube http://kubernetes.oss-cn-hangzhou.aliyuncs.com/minikube/releas
 curl -LO https://storage.googleapis.com/kubernetes-release/release/$(curl -s https://storage.googleapis.com/kubernetes-release/release/stable.txt)/bin/linux/amd64/kubectl
 ```
 
-###K8S集群
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+### K8S集群
 
 本次实验采用三个节点
 
@@ -829,11 +919,172 @@ sysctl -p /etc/sysctl.d/k8s.conf
 
 
 
+## ++Openstack Rocky 版本安装++
+
+### - 数据库
+
+​	update user set password=password("000") where user='root';
+
+- bind-address
+
+```
+[mysqld]
+bind-address = xx.xx.xxx.xx
+是MYSQL用来监听某个单独的TCP/IP连接,只能绑定一个IP地址,被绑定的IP地址可以映射多个网络接口. 
+可以是IPv4,IPv6或是主机名,但需要在MYSQL启动的时候指定(主机名在服务启动的时候解析成IP地址进行绑定).
+默认是"*"
+```
+
+参数	应用场景
+
+接收所有的IPv4 或 IPv6 连接请求
+0.0.0.0	接受所有的IPv4地址
+::	接受所有的IPv4 或 IPv6 地址
+IPv4-mapped	接受所有的IPv4地址或IPv4邦定格式的地址（例 ::ffff:127.0.0.1）
+IPv4（IPv6）	只接受对应的IPv4（IPv6）地址
+
+```shell
+innodb_file_per_table = on
+innodb存储引擎可以将所有数据存放于ibdata*的共享表空间，也可以将每张表存放于独立的.ibd表空间
+@https://blog.csdn.net/jesseyoung/article/details/42236615
+```
+
+### - keystone
+
+```shelll
+# openstack user create --domain default --password-prompt glance
+The request you have made requires authentication. (HTTP 401) (Request-ID: req-55d15577-9d5e-4db5-b858-acdbb0b68fc1)
+tail -20f /var/log/keystone/keystone.log
+2018-10-22 00:57:45.265 12444 WARNING keystone.common.wsgi [req-f8d3acb6-f8ef-4ae8-bbf5-99174e43378e 5fc122903a4049fc82ab2475453eca1a 61a8cdde6cc64982aa272a0dfcd4457b - default default] You are not authorized to perform the requested action: identity:create_user.: ForbiddenAction: You are not authorized to perform the requested action: identity:create_user.
+2018-10-22 13:23:47.022 1290 INFO keystone.common.wsgi [req-55d15577-9d5e-4db5-b858-acdbb0b68fc1 - - - - -] POST http://controller:5000/v3/auth/tokens
+2018-10-22 13:23:48.689 1290 WARNING keystone.common.wsgi [req-55d15577-9d5e-4db5-b858-acdbb0b68fc1 - - - - -] Authorization failed. The request you have made requires authentication. from 192.168.1.220: Unauthorized: The request you have made requires authentication.
+```
+
+错误原因：
+
+在创建完admin 用户脚本后， 修改了admin-openrc, 将用户修改到了myproject中，导致鉴权失败，将project_name, username password 修改回来后正常创建
+
+```
+export OS_PROJECT_DOMAIN_NAME=Default
+export OS_USER_DOMAIN_NAME=Default
+export OS_PROJECT_NAME=admin
+export OS_USERNAME=admin
+export OS_PASSWORD=admin_pass
+export OS_AUTH_URL=http://controller:5000/v3
+export OS_IDENTITY_API_VERSION=3
+export OS_IMAGE_API_VERSION=
+```
+
+
+
+```
+grant all privileges on keystone.* to 'keystone'@'%' identified by 'keystone_dbpass';
+```
+
+```
+keystone-manage bootstrap --bootstrap-password admin_pass \
+  --bootstrap-admin-url http://controller:5000/v3/ \
+  --bootstrap-internal-url http://controller:5000/v3/ \
+  --bootstrap-public-url http://controller:5000/v3/ \
+  --bootstrap-region-id RegionOne
+```
+
+```
+ export OS_USERNAME=admin
+ export OS_PASSWORD=admin_pass
+ export OS_PROJECT_NAME=admin
+ export OS_USER_DOMAIN_NAME=Default
+ export OS_PROJECT_DOMAIN_NAME=Default
+ export OS_AUTH_URL=http://controller:5000/v3
+ export OS_IDENTITY_API_VERSION=3
+```
+
+```
+# echo $OS_AUTH_URL
+http://controller:5000/v3
+[root@vm1 ~]# echo $OS_PASSWORD
+admin_pass
+```
+
+```
+GRANT ALL PRIVILEGES ON glance.* TO 'glance'@'localhost' \
+  IDENTIFIED BY 'glance_dbpass';
+GRANT ALL PRIVILEGES ON glance.* TO 'glance'@'%' \
+  IDENTIFIED BY 'glance_dbpass';
+ 
+ 
+```
+
+### -nova
+
+```
+	GRANT ALL PRIVILEGES ON nova_cell0.* TO 'nova'@'%' \
+  IDENTIFIED BY 'nova_dbpass';
+  GRANT ALL PRIVILEGES ON placement.* TO 'placement'@'localhost' \
+  IDENTIFIED BY 'placement_dbpass';
+  GRANT ALL PRIVILEGES ON placement.* TO 'placement'@'%' \
+  IDENTIFIED BY 'placement_dbpass';
+  
+  
+  
+```
+
+填充nova-api 和placement数据库报错：
+
+```shell
+CantStartEngineError: No sql_connection parameter is established
+```
+
+原因是缺少数据库连接参数
+
+解决办法：在出现问题的节点（一般是计算节点）添加下面的配置项目:
+
+```
+[database]
+connection = mysql+pymysql://nova:nova_dbpass@controller/nova_cell0?charset=utf8
+[api_database]
+connection = mysql+pymysql://nova:nova_dbpass@controller/nova_api?charset=utf8
+```
+
+```
+systemctl start openstack-nova-compute.service
+长时间无响应且日志无输出
+原因： /etc/hosts未配置controll解析
+```
+
+```
+
+```
 
 
 
 
 
+### - ceph 
+
+  Ceph 集群的逻辑结构由Pool和PG(Placement Group) 来定义
+
+
+
+### - rabbitmq
+
+rabbitmqctl  add_user openstack rabbit_pass
+
+```shell
+$sudo rabbitmqctl  set_permissions -p /vhost1  user_admin '.*' '.*' '.*'
+该命令使用户user_admin具有/vhost1这个virtual host中所有资源的配置、写、读权限以便管理其中的资源
+# rabbitmqctl set_permissions openstack ".*" ".*" ".*"
+Setting permissions for user "openstack" in vhost "/" ...
+```
+
+### - neutron
+
+```
+2018-10-22 17:27:40.409 6131 ERROR neutron.plugins.ml2.managers [-] No type driver for tenant network_type: local. Service terminated!
+原因：
+解决办法：
+
+```
 
 
 
@@ -879,8 +1130,6 @@ sysctl -p /etc/sysctl.d/k8s.conf
    echo ${!a[@]}
    0 1 2 3
    ```
-
-   
 
 4. 获取数组某个索引位置的元素
 
@@ -945,7 +1194,6 @@ ${0:0:1}  $0表示脚本名字, 0:1 表示取脚本的第一个字符
    declare -a var 
    ```
 
-   
 
 
 
@@ -994,5 +1242,3 @@ ${0:0:1}  $0表示脚本名字, 0:1 表示取脚本的第一个字符
    由此怀疑是网络拦截,联系阿里云客服后发现"看您有reset情况，为排除我方拦截影响，您把本地公网ip云盾加白后测试下。云盾访问白名单地址 https://yundun.console.aliyun.com/?p=sc#/sc/visitWhiteList  "
    将本地公网IP地址加入白名单后,能正常连接
    ```
-
-   
